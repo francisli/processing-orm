@@ -16,10 +16,6 @@ import java.util.HashMap;
 
 import processing.core.PApplet;
 
-interface ResultSetIterator<T> {
-  void next(T obj);
-}
-
 interface PrimaryKeySetter {
   void setPrimaryKey(PreparedStatement stmt, int i) throws Exception;
 }
