@@ -60,15 +60,58 @@ public abstract class SimpleORM<T> {
     return get((stmt, i) -> stmt.setLong(i, id));
   }
 
+  Field[] getFields(Class clazz) throws Exception {
+    Field[] fields = SimpleORM.fields.get(clazz);
+    if (fields == null) {
+      fields = clazz.getFields();
+      SimpleORM.fields.put(clazz, fields);
+
+      //// create an appropriate table if needed
+      StringBuffer buffer = new StringBuffer();
+      buffer.append("CREATE TABLE IF NOT EXISTS ");
+      buffer.append(clazz.getSimpleName());
+      buffer.append(" (");
+      boolean first = true;
+      for (int i = 0, length = fields.length; i < length; i++) {
+        Field field = fields[i];
+        if ((field.getModifiers() & Modifier.TRANSIENT) > 0) {
+          continue;
+        }
+        Class type = field.getType();
+        String columnType;
+        if (type == Integer.class || type == Long.class || type == Boolean.class ||
+            type == Integer.TYPE || type == Long.TYPE || type == Boolean.TYPE) {
+          columnType = " INTEGER";
+        } else if (type == Float.class || type == Double.class) {
+          columnType = " REAL";
+        } else if (type == String.class) {
+          columnType = " TEXT";
+        } else {
+          continue;
+        }
+        if (!first) {
+          buffer.append(", ");
+        }
+        String name = field.getName();
+        buffer.append(name);
+        buffer.append(columnType);
+        if (name.equals("id")) {
+          buffer.append(" PRIMARY KEY");
+        }
+        first = false;
+      }
+      buffer.append(")");
+      Statement createStmt = conn.createStatement();
+      createStmt.execute(buffer.toString());
+    }
+    return fields;
+  }
+
   T get(PrimaryKeySetter setter) {
     try {
       T result = newInstance();
       Class clazz = result.getClass();
-      Field[] fields = SimpleORM.fields.get(clazz);
-      if (fields == null) {
-        fields = clazz.getFields();
-        SimpleORM.fields.put(clazz, fields);
-      }
+      Field[] fields = getFields(clazz);
       Field primaryKeyField = null;
       for (Field field: fields) {
         if ((field.getModifiers() & Modifier.TRANSIENT) > 0) {
@@ -155,55 +198,13 @@ public abstract class SimpleORM<T> {
   public void put(T obj) {
     try {
       Class clazz = obj.getClass();
-      Field[] fields = SimpleORM.fields.get(clazz);
-      if (fields == null) {
-        fields = clazz.getFields();
-        SimpleORM.fields.put(clazz, fields);
-      }
+      Field[] fields = getFields(clazz);
       PreparedStatement insert = inserts.get(clazz);
       if (insert == null) {
-        //// create an appropriate table if needed
-        StringBuffer buffer = new StringBuffer();
-        buffer.append("CREATE TABLE IF NOT EXISTS ");
-        String tableName = clazz.getSimpleName();
-        buffer.append(tableName);
-        buffer.append(" (");
-        boolean first = true;
-        for (int i = 0, length = fields.length; i < length; i++) {
-          Field field = fields[i];
-          if ((field.getModifiers() & Modifier.TRANSIENT) > 0) {
-            continue;
-          }
-          Class type = field.getType();
-          String columnType;
-          if (type == Integer.class || type == Long.class || type == Boolean.class ||
-              type == Integer.TYPE || type == Long.TYPE || type == Boolean.TYPE) {
-            columnType = " INTEGER";
-          } else if (type == Float.class || type == Double.class) {
-            columnType = " REAL";
-          } else if (type == String.class) {
-            columnType = " TEXT";
-          } else {
-            continue;
-          }
-          if (!first) {
-            buffer.append(", ");
-          }
-          String name = field.getName();
-          buffer.append(name);
-          buffer.append(columnType);
-          if (name.equals("id")) {
-            buffer.append(" PRIMARY KEY");
-          }
-          first = false;
-        }
-        buffer.append(")");
-        Statement createStmt = conn.createStatement();
-        createStmt.execute(buffer.toString());
         //// generate the insert statement
-        buffer = new StringBuffer();
+        StringBuffer buffer = new StringBuffer();
         buffer.append("INSERT OR REPLACE INTO ");
-        buffer.append(tableName);
+        buffer.append(clazz.getSimpleName());
         buffer.append(" (");
         int count = 0;
         for (int i = 0, length = fields.length; i < length; i++) {
@@ -256,11 +257,7 @@ public abstract class SimpleORM<T> {
   public void query(String query, ResultSetIterator<T> results) {
     try {
       Class<T> clazz = getClassType();
-      Field[] fields = SimpleORM.fields.get(clazz);
-      if (fields == null) {
-        fields = clazz.getFields();
-        SimpleORM.fields.put(clazz, fields);
-      }
+      Field[] fields = getFields(clazz);
       StringBuffer buffer = new StringBuffer();
       buffer.append("SELECT * FROM ");
       buffer.append(clazz.getSimpleName());
