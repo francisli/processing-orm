@@ -4,7 +4,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.sql.ResultSet;
 
-class Results {
+public class Results {
   ResultSet resultSet;
   Field[] fields;
 
