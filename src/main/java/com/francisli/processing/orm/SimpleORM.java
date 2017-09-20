@@ -135,36 +135,13 @@ public abstract class SimpleORM<T> {
       }
       setter.setPrimaryKey(select, 1);
       ResultSet resultSet = select.executeQuery();
-      if (resultSet.next()) {
-        for (Field field: fields) {
-          setValue(resultSet, result, field);
-        }
+      Results results = new Results(resultSet, fields);
+      if (results.next(result)) {
         return result;
       }
       return null;
     } catch (Exception e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  void setValue(ResultSet resultSet, T result, Field field) throws Exception {
-    if ((field.getModifiers() & Modifier.TRANSIENT) > 0) {
-      return;
-    }
-    Class type = field.getType();
-    String name = field.getName();
-    if (type == Integer.class || type == Integer.TYPE) {
-      field.setInt(result, resultSet.getInt(name));
-    } else if (type == Long.class || type == Long.TYPE) {
-      field.setLong(result, resultSet.getLong(name));
-    } else if (type == Float.class || type == Float.TYPE) {
-      field.setFloat(result, resultSet.getFloat(name));
-    } else if (type == Double.class || type == Double.TYPE) {
-      field.setDouble(result, resultSet.getDouble(name));
-    } else if (type == Boolean.class || type == Boolean.TYPE) {
-      field.setBoolean(result, resultSet.getBoolean(name));
-    } else if (type == String.class) {
-      field.set(result, resultSet.getString(name));
     }
   }
 
@@ -245,12 +222,17 @@ public abstract class SimpleORM<T> {
 
   public T[] fetch(String query) {
     ArrayList<T> list = new ArrayList<T>();
-    query(query, result -> list.add(result));
-    T[] results = (T[]) Array.newInstance(getClassType(), list.size());
-    return (T[])list.toArray(results);
+    Results results = query(query);
+    T result = newInstance();
+    while (results.next(result)) {
+      list.add(result);
+      result = newInstance();
+    }
+    T[] array = (T[]) Array.newInstance(getClassType(), list.size());
+    return (T[])list.toArray(array);
   }
 
-  public void query(String query, ResultSetIterator<T> results) {
+  public Results query(String query) {
     try {
       Class<T> clazz = getClassType();
       Field[] fields = getFields(clazz);
@@ -261,13 +243,7 @@ public abstract class SimpleORM<T> {
       buffer.append(query);
       Statement select = conn.createStatement();
       ResultSet resultSet = select.executeQuery(buffer.toString());
-      while (resultSet.next()) {
-        T result = clazz.newInstance();
-        for (Field field: fields) {
-          setValue(resultSet, result, field);
-        }
-        results.next(result);
-      }
+      return new Results(resultSet, fields);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
